@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>つどい百貨店｜ネットショップの百貨店</title>
+<meta name="description" content="誰でも出店できる、ネットショップの百貨店。各テナントが自由に店名と商品を決めて営業しています。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="logo" href="index.html">つどい百貨店</a>
+  <nav>
+    <a href="#shops">フロアガイド</a>
+    <a href="#flow">出店の流れ</a>
+    <a href="apply.html">出店申込</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <h1>ネットショップの百貨店</h1>
+  <p>ここは、誰でもお店を出せる百貨店です。<br>各テナントが店名も商品も自由に決めて、それぞれの「お店」で営業しています。</p>
+</div>
+
+<main>
+  <h2 class="section-title" id="shops">フロアガイド</h2>
+  <div class="floor-bar" id="floor-bar"></div>
+  <div class="shop-grid" id="shop-grid"></div>
+  <p class="msg" id="load-msg"></p>
+
+  <h2 class="section-title" id="flow">出店の流れ</h2>
+  <div class="steps">
+    <div class="step"><div class="num">1</div><h4>出店申込</h4><p>店名・売りたい商品などをフォームから送ります。どなたでも申し込めます。</p></div>
+    <div class="step"><div class="num">2</div><h4>百貨店が確認</h4><p>内容を確認して承認すると、あなたの「お店ページ」が自動で生まれます。</p></div>
+    <div class="step"><div class="num">3</div><h4>商品を並べる</h4><p>お店ページに商品を追加して、棚を整えます。</p></div>
+    <div class="step"><div class="num">4</div><h4>販売開始</h4><p>売上はあなたのお店のもの。発送とお客様対応は各お店で行います。</p></div>
+  </div>
+  <div class="cta-row">
+    <a class="btn" href="apply.html">出店を申し込む</a>
+  </div>
+</main>
+
+<footer>
+  つどい百貨店（プロトタイプ）<br>
+  <a href="apply.html">出店申込</a><a href="admin.html">百貨店の管理</a>
+</footer>
+
+<script>
+const FLOORS = [
+  { key: "all", label: "全館" },
+  { key: "B1F", label: "B1F 食品" },
+  { key: "1F", label: "1F ファッション・雑貨" },
+  { key: "2F", label: "2F 住まい・日用品" },
+  { key: "3F", label: "3F 本・文具" },
+  { key: "4F", label: "4F 美容・健康" },
+  { key: "5F", label: "5F 趣味・エンタメ" },
+  { key: "RF", label: "RF 催事場" }
+];
+let shops = [];
+let currentFloor = "all";
+
+function renderFloorBar() {
+  const bar = document.getElementById("floor-bar");
+  bar.innerHTML = "";
+  FLOORS.forEach(function (f) {
+    const count = f.key === "all" ? shops.length : shops.filter(s => s.floor === f.key).length;
+    const b = document.createElement("button");
+    b.className = "floor-btn" + (currentFloor === f.key ? " active" : "");
+    b.textContent = f.label + "（" + count + "店）";
+    b.addEventListener("click", function () { currentFloor = f.key; renderFloorBar(); renderShops(); });
+    bar.appendChild(b);
+  });
+}
+
+function renderShops() {
+  const grid = document.getElementById("shop-grid");
+  const list = currentFloor === "all" ? shops : shops.filter(s => s.floor === currentFloor);
+  grid.innerHTML = "";
+  if (list.length === 0) {
+    grid.innerHTML = "<p>このフロアにはまだお店がありません。</p>";
+    return;
+  }
+  list.forEach(function (shop) {
+    const card = document.createElement("div");
+    card.className = "shop-card";
+    card.innerHTML =
+      '<div class="shop-banner" style="background:' + shop.color + '">' +
+        '<div class="floor">' + shop.floor + " ｜ " + shop.genre + '</div>' +
+        "<h3>" + shop.name + "</h3>" +
+      "</div>" +
+      '<div class="shop-meta">' +
+        '<div class="tagline">' + shop.tagline + "</div>" +
+        "<div>店主：" + shop.owner + " ／ 商品 " + shop.products.length + "点</div>" +
+      "</div>";
+    card.addEventListener("click", function () {
+      window.location.href = "shop.html?slug=" + shop.slug;
+    });
+    grid.appendChild(card);
+  });
+}
+
+fetch("/api/shops")
+  .then(r => r.json())
+  .then(data => { shops = data; renderFloorBar(); renderShops(); })
+  .catch(() => { document.getElementById("load-msg").textContent = "お店の読み込みに失敗しました。"; });
+</script>
+</body>
+</html>

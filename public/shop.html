@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お店ページ｜つどい百貨店</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="logo" href="index.html">つどい百貨店</a>
+  <nav>
+    <a href="index.html#shops">フロアガイド</a>
+    <a href="apply.html">出店申込</a>
+  </nav>
+</header>
+
+<div id="shop-hero" class="shop-hero" style="background:#1d2a4a">
+  <h1 id="shop-name">読み込み中…</h1>
+  <p id="shop-tagline"></p>
+</div>
+
+<main>
+  <div id="paid-area"></div>
+  <div class="owner-msg" id="owner-msg" style="display:none"></div>
+  <h2 class="section-title">商品棚</h2>
+  <div class="product-grid" id="product-grid"></div>
+
+  <div class="cart-box">
+    <h3>このお店のカート</h3>
+    <div id="cart-lines"></div>
+    <div class="cart-total" id="cart-total">合計 ¥0</div>
+    <button class="btn" id="checkout-btn">購入手続きへ（Stripe）</button>
+    <p class="msg" id="cart-msg"></p>
+  </div>
+  <p style="margin-top:20px"><a href="index.html">← 百貨店トップに戻る</a></p>
+</main>
+
+<footer>つどい百貨店（プロトタイプ）</footer>
+
+<script>
+const slug = new URLSearchParams(window.location.search).get("slug");
+const cartKey = "cart-" + slug;
+let shop = null;
+let cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
+
+function fmt(n) { return "¥" + n.toLocaleString("ja-JP"); }
+
+function renderCart() {
+  const lines = document.getElementById("cart-lines");
+  let total = 0;
+  if (cart.length === 0) {
+    lines.innerHTML = "<p style='color:#6b7280;font-size:14px'>カートは空です。</p>";
+  } else {
+    lines.innerHTML = "";
+    cart.forEach(function (item) {
+      const p = shop.products.find(x => x.id === item.id);
+      if (!p) return;
+      total += p.price * item.quantity;
+      const row = document.createElement("div");
+      row.className = "cart-line";
+      row.innerHTML = "<span>" + p.name + " × " + item.quantity + "</span><span>" + fmt(p.price * item.quantity) + "</span>";
+      lines.appendChild(row);
+    });
+  }
+  document.getElementById("cart-total").textContent = "合計 " + fmt(total);
+  localStorage.setItem(cartKey, JSON.stringify(cart));
+}
+
+function addToCart(product) {
+  const ex = cart.find(x => x.id === product.id);
+  if (ex) ex.quantity += 1; else cart.push({ id: product.id, quantity: 1 });
+  renderCart();
+  const msg = document.getElementById("cart-msg");
+  msg.className = "msg ok";
+  msg.textContent = product.name + " をカートに入れました。";
+}
+
+fetch("/api/shops/" + slug)
+  .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  .then(data => {
+    shop = data;
+    document.title = shop.name + "｜つどい百貨店";
+    document.getElementById("shop-hero").style.background = shop.color;
+    document.getElementById("shop-name").textContent = shop.name;
+    document.getElementById("shop-tagline").textContent = shop.tagline + "（店主：" + shop.owner + "）";
+    if (shop.message) {
+      const m = document.getElementById("owner-msg");
+      m.style.display = "block";
+      m.textContent = "店主のことば：" + shop.message;
+    }
+    const grid = document.getElementById("product-grid");
+    shop.products.forEach(function (p) {
+      const card = document.createElement("div");
+      card.className = "product-card";
+      card.innerHTML = '<div class="thumb">🛍️</div><h3>' + p.name + '</h3><p class="desc">' + (p.description || "") + '</p><p class="price">' + fmt(p.price) + '</p>';
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.textContent = "カートに入れる";
+      btn.addEventListener("click", function () { addToCart(p); });
+      card.appendChild(btn);
+      grid.appendChild(card);
+    });
+    renderCart();
+    if (new URLSearchParams(window.location.search).get("paid") === "1") {
+      document.getElementById("paid-area").innerHTML = '<div class="paid-banner">ご購入ありがとうございました！（' + shop.name + "）</div>";
+      cart = [];
+      renderCart();
+    }
+  })
+  .catch(() => {
+    document.getElementById("shop-name").textContent = "お店が見つかりませんでした";
+  });
+
+document.getElementById("checkout-btn").addEventListener("click", function () {
+  const msg = document.getElementById("cart-msg");
+  if (cart.length === 0) { msg.className = "msg error"; msg.textContent = "カートが空です。"; return; }
+  this.disabled = true;
+  this.textContent = "決済画面へ移動しています…";
+  fetch("/api/shops/" + slug + "/create-checkout-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cart: cart })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.url) { window.location.href = data.url; }
+      else {
+        msg.className = "msg error";
+        msg.textContent = data.error || "エラーが発生しました";
+        document.getElementById("checkout-btn").disabled = false;
+        document.getElementById("checkout-btn").textContent = "購入手続きへ（Stripe）";
+      }
+    })
+    .catch(() => {
+      msg.className = "msg error";
+      msg.textContent = "サーバーに接続できませんでした。";
+      document.getElementById("checkout-btn").disabled = false;
+      document.getElementById("checkout-btn").textContent = "購入手続きへ（Stripe）";
+    });
+});
+</script>
+</body>
+</html>
