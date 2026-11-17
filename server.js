@@ -39,8 +39,14 @@ function slugify(name) {
 let mailer = null;
 if (process.env.SMTP_USER && process.env.SMTP_PASS) {
   mailer = require("nodemailer").createTransport({
-    service: "gmail",
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    family: 4,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000
   });
 }
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || process.env.SMTP_USER || "";
@@ -54,11 +60,15 @@ async function sendMail(to, subject, text) {
     console.log("[mail] 未設定または宛先なしのため送信スキップ: " + subject);
     return;
   }
-  try {
-    await mailer.sendMail({ from: process.env.SMTP_USER, to, subject, text });
-    console.log("[mail] 送信しました: " + subject + " -> " + to);
-  } catch (e) {
-    console.error("[mail] 送信失敗: " + e.message);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await mailer.sendMail({ from: process.env.SMTP_USER, to, subject, text });
+      console.log("[mail] 送信しました（" + attempt + "回目）: " + subject + " -> " + to);
+      return;
+    } catch (e) {
+      console.error("[mail] 送信失敗（" + attempt + "回目）: " + e.message);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
   }
 }
 
@@ -98,7 +108,7 @@ app.get("/api/shops/:slug", (req, res) => {
 });
 
 // ---- 出店申込 ----
-app.post("/api/applications", (req, res) => {
+app.post("/api/applications", async (req, res) => {
   const { shopName, ownerName, email, genre, floor, tagline, message, product } = req.body || {};
   if (!shopName || !ownerName || !email || !product || !product.name || !product.price) {
     return res.status(400).json({ error: "必須項目が不足しています（店名・お名前・メール・最初の商品）" });
@@ -117,12 +127,12 @@ app.post("/api/applications", (req, res) => {
   };
   apps.push(appEntry);
   writeJson(APPS_FILE, apps);
-  res.status(201).json({ ok: true, id: appEntry.id });
 
-  // 百貨店（運営）へ通知メール
-  sendMail(NOTIFY_EMAIL,
+  // 百貨店（運営）へ通知メール（送信を待ってから応答する）
+  await sendMail(NOTIFY_EMAIL,
     `【つどい百貨店】新しい出店申込が届きました｜${appEntry.shopName}`,
     `新しい出店申込が届きました。\n\n店名: ${appEntry.shopName}\n店主: ${appEntry.ownerName}（${appEntry.email}）\nジャンル: ${appEntry.genre} ／ 希望フロア: ${appEntry.floor}\n一言紹介: ${appEntry.tagline}\n店主のことば: ${appEntry.message}\n最初の商品: ${appEntry.product.name} ¥${Number(appEntry.product.price).toLocaleString("ja-JP")}\n${appEntry.product.description}\n\n▼ そのまま承認する（お店ページが自動でできます）\n${decisionUrl(req, appEntry.id, "approve")}\n\n▼ 見送る\n${decisionUrl(req, appEntry.id, "reject")}\n\n▼ 管理画面で確認する\n${baseUrlOf(req)}/admin.html\n\nつどい百貨店`);
+  res.status(201).json({ ok: true, id: appEntry.id });
 });
 
 // ---- 管理（百貨店運営） ----
@@ -187,14 +197,14 @@ async function notifyApplicantRejected(entry) {
 app.post("/api/admin/applications/:id/approve", requireAdmin, async (req, res) => {
   const result = approveApplication(req.params.id);
   if (!result.ok) return res.status(result.status).json({ error: result.error });
-  notifyApplicantApproved(req, result.entry, result.slug);
+  await notifyApplicantApproved(req, result.entry, result.slug);
   res.json({ ok: true, slug: result.slug });
 });
 
 app.post("/api/admin/applications/:id/reject", requireAdmin, async (req, res) => {
   const result = rejectApplication(req.params.id);
   if (!result.ok) return res.status(result.status).json({ error: result.error });
-  notifyApplicantRejected(result.entry);
+  await notifyApplicantRejected(result.entry);
   res.json({ ok: true });
 });
 
@@ -211,12 +221,12 @@ app.get("/decide/:id", async (req, res) => {
   if (action === "approve") {
     const result = approveApplication(req.params.id);
     if (!result.ok) return res.status(result.status).send(page("処理できませんでした", result.error));
-    notifyApplicantApproved(req, result.entry, result.slug);
+    await notifyApplicantApproved(req, result.entry, result.slug);
     return res.send(page("承認しました", `「${result.entry.shopName}」のお店ページができました。<br><a href="/shop.html?slug=${result.slug}">お店ページを見る</a>`));
   }
   const result = rejectApplication(req.params.id);
   if (!result.ok) return res.status(result.status).send(page("処理できませんでした", result.error));
-  notifyApplicantRejected(result.entry);
+  await notifyApplicantRejected(result.entry);
   return res.send(page("見送りました", `「${result.entry.shopName}」の出店申込を見送りました。`));
 });
 
