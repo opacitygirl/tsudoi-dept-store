@@ -1,0 +1,86 @@
+[
+  {
+    "slug": "cho-tsushin",
+    "name": "超通信ストア",
+    "owner": "奥森皐月",
+    "genre": "グッズ",
+    "floor": "5F",
+    "tagline": "Podcast「諭吉・皐月の超通信」の公式グッズ店",
+    "message": "番組グッズはすべてこのサイト限定のオリジナル商品です。",
+    "color": "#123332",
+    "accent": "#7CFF4E",
+    "contactEmail": "ykcstk+shop@gmail.com",
+    "stripeAccountId": null,
+    "products": [
+      {
+        "id": 1,
+        "name": "オリジナルTシャツ",
+        "price": 3200,
+        "description": "上質なコットン100%のオリジナルデザインTシャツ。"
+      },
+      {
+        "id": 2,
+        "name": "ステッカーセット",
+        "price": 600,
+        "description": "オリジナルステッカーのセット。"
+      },
+      {
+        "id": 3,
+        "name": "マグカップ",
+        "price": 1800,
+        "description": "たっぷり入る日常使いしやすいマグカップ。"
+      },
+      {
+        "id": 4,
+        "name": "トートバッグ",
+        "price": 2400,
+        "description": "A4ファイルも入るキャンバス地トートバッグ。"
+      },
+      {
+        "id": 5,
+        "name": "アクリルキーホルダー",
+        "price": 900,
+        "description": "ポーチやバッグにつけるとかわいいアクキー。"
+      },
+      {
+        "id": 6,
+        "name": "パーカー",
+        "price": 5600,
+        "description": "厚みのある素材で冬場にぴったりのパーカー。"
+      }
+    ]
+  },
+  {
+    "slug": "sakiyama-otakara",
+    "name": "崎山先生のおたからSHOP",
+    "owner": "崎山先生",
+    "genre": "おたから",
+    "floor": "RF",
+    "tagline": "崎山先生が見つけてきた「おたから」を販売しています",
+    "message": "なかなか手に入らない代物をそろえました。",
+    "color": "#4a2f1b",
+    "accent": "#a31621",
+    "contactEmail": "",
+    "stripeAccountId": null,
+    "products": [
+      {
+        "id": 1,
+        "name": "チェルシー",
+        "price": 10000,
+        "description": "おたからのキャンディです。なかなか手に入らない代物です。"
+      },
+      {
+        "id": 2,
+        "name": "M＆M'S ピーナッツ",
+        "price": 5000,
+        "description": "黄色のパッケージがかわいらしい、当店のおすすめ商品です。"
+      },
+      {
+        "id": 3,
+        "name": "ゴジラのぬいぐるみ",
+        "price": 20000,
+        "description": "大きくて本物そっくりの、レアな一点です。"
+      }
+    ]
+  }
+]
