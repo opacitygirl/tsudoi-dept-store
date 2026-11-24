@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>店主用 編集ページ｜つどい百貨店</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="logo" href="index.html">つどい百貨店</a>
+  <nav><a href="index.html#shops">フロアガイド</a><a id="nav-shop" href="#">自分のお店を見る</a></nav>
+</header>
+
+<main>
+  <h2 class="section-title">店主用 編集ページ</h2>
+
+  <div class="form-card" id="login-card">
+    <p style="margin-top:0;line-height:1.9;font-size:14px">承認メールに記載された「編集キー」を入力してください。編集キーはパスワードのようなものです。他の人に教えないでください。</p>
+    <label>編集キー</label>
+    <input id="tenant-key" type="password" placeholder="編集キーを入力" autocomplete="off">
+    <div class="cta-row"><button class="btn sub" id="login-btn">ログイン</button></div>
+    <p class="msg" id="login-msg"></p>
+    <p class="hint">編集キーが分からない場合は、百貨店の運営までご連絡ください。運営が新しいキーを発行できます（その際、古いキーは使えなくなります）。</p>
+  </div>
+
+  <div id="editor" style="display:none">
+    <div class="owner-msg">
+      <strong id="shop-title"></strong><br>
+      <span id="shop-meta" style="font-size:13px"></span>
+      <div style="margin-top:8px">
+        <button class="small-btn" id="logout-btn">ログアウト</button>
+      </div>
+    </div>
+
+    <h3>お店の紹介文</h3>
+    <form class="form-card" id="shop-form" style="margin:0;max-width:none">
+      <label>一言紹介（お店ページの見出しの下に出ます）</label>
+      <input id="s-tagline" maxlength="120">
+      <label>店主のことば</label>
+      <textarea id="s-message" rows="4" maxlength="1000"></textarea>
+      <div class="cta-row"><button class="btn" type="submit">紹介文を保存</button></div>
+      <p class="msg" id="shop-msg"></p>
+    </form>
+
+    <h3 style="margin-top:32px">商品の編集</h3>
+    <div id="product-list"></div>
+
+    <h3 style="margin-top:32px">商品を追加</h3>
+    <form class="form-card" id="add-form" style="margin:0;max-width:none">
+      <label>商品名</label>
+      <input id="a-name" required maxlength="60">
+      <label>価格（円）</label>
+      <input id="a-price" type="number" required min="1" max="10000000" step="1">
+      <label>説明</label>
+      <textarea id="a-desc" rows="2" maxlength="500"></textarea>
+      <label>商品画像のURL（任意）</label>
+      <input id="a-image" type="url" placeholder="https://…" maxlength="500">
+      <div class="cta-row"><button class="btn" type="submit">商品を追加</button></div>
+      <p class="msg" id="add-msg"></p>
+    </form>
+  </div>
+</main>
+
+<footer>つどい百貨店（プロトタイプ）</footer>
+
+<script>
+const slug = new URLSearchParams(window.location.search).get("slug");
+const storeKey = "tenant-key-" + slug;
+let shopData = null;
+
+document.getElementById("nav-shop").href = "shop.html?slug=" + encodeURIComponent(slug || "");
+
+function tenantKey() { return sessionStorage.getItem(storeKey) || ""; }
+function headers() { return { "Content-Type": "application/json", "x-tenant-key": tenantKey() }; }
+function yen(n) { return "¥" + Number(n).toLocaleString("ja-JP"); }
+
+function showLogin(msg, isError) {
+  document.getElementById("login-card").style.display = "block";
+  document.getElementById("editor").style.display = "none";
+  const m = document.getElementById("login-msg");
+  m.className = "msg " + (isError ? "error" : "ok");
+  m.textContent = msg || "";
+}
+
+function productCard(p) {
+  const div = document.createElement("div");
+  div.className = "app-card";
+
+  const title = document.createElement("strong");
+  title.textContent = p.name + "（" + yen(p.price) + "）";
+  div.appendChild(title);
+  div.appendChild(document.createElement("br"));
+
+  function field(labelText, value, type, max) {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    label.style.cssText = "display:block;font-size:12px;font-weight:700;margin:10px 0 4px";
+    const input = document.createElement(type === "textarea" ? "textarea" : "input");
+    if (type !== "textarea") input.type = type;
+    input.value = value || "";
+    input.maxLength = max || 500;
+    input.style.cssText = "width:100%;padding:8px 10px;border:1px solid #e3dcc9;border-radius:6px;font-family:inherit;font-size:14px;background:#fffdf8";
+    div.appendChild(label);
+    div.appendChild(input);
+    return input;
+  }
+
+  const nameInput = field("商品名", p.name, "text", 60);
+  const priceInput = field("価格（円）", p.price, "number");
+  const descInput = field("説明", p.description, "textarea", 500);
+  const imageInput = field("商品画像のURL（任意）", p.image, "url", 500);
+
+  const msg = document.createElement("p");
+  msg.className = "msg";
+
+  const save = document.createElement("button");
+  save.className = "small-btn";
+  save.textContent = "この商品を保存";
+  save.addEventListener("click", function () {
+    fetch("/api/tenant/" + encodeURIComponent(slug) + "/products/" + p.id, {
+      method: "PUT", headers: headers(),
+      body: JSON.stringify({ name: nameInput.value, price: Number(priceInput.value), description: descInput.value, image: imageInput.value })
+    }).then(r => r.json()).then(d => {
+      msg.className = "msg " + (d.ok ? "ok" : "error");
+      msg.textContent = d.ok ? "保存しました。お店ページに反映されています。" : (d.error || "失敗しました");
+      if (d.ok) loadShop();
+    }).catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
+  });
+
+  const del = document.createElement("button");
+  del.className = "small-btn";
+  del.textContent = "この商品を削除";
+  del.addEventListener("click", function () {
+    if (!confirm("「" + p.name + "」を削除しますか？ 元に戻せません。")) return;
+    fetch("/api/tenant/" + encodeURIComponent(slug) + "/products/" + p.id, {
+      method: "DELETE", headers: headers()
+    }).then(r => r.json()).then(d => {
+      if (d.ok) loadShop();
+      else { msg.className = "msg error"; msg.textContent = d.error || "削除できませんでした"; }
+    }).catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
+  });
+
+  div.appendChild(document.createElement("br"));
+  div.appendChild(save);
+  div.appendChild(del);
+  div.appendChild(msg);
+  return div;
+}
+
+function render() {
+  document.getElementById("login-card").style.display = "none";
+  document.getElementById("editor").style.display = "block";
+  document.title = shopData.name + " 編集ページ｜つどい百貨店";
+  document.getElementById("shop-title").textContent = shopData.name;
+  document.getElementById("shop-meta").textContent = shopData.floor + " ｜ " + shopData.genre + " ｜ 店主：" + shopData.owner;
+  document.getElementById("s-tagline").value = shopData.tagline || "";
+  document.getElementById("s-message").value = shopData.message || "";
+  const list = document.getElementById("product-list");
+  list.innerHTML = "";
+  if (!shopData.products || shopData.products.length === 0) {
+    list.innerHTML = "<p>商品はまだありません。下のフォームから追加してください。</p>";
+  }
+  (shopData.products || []).forEach(function (p) { list.appendChild(productCard(p)); });
+}
+
+function loadShop() {
+  if (!slug) { showLogin("お店が指定されていません。承認メールのリンクから開いてください。", true); return; }
+  if (!tenantKey()) { showLogin("", false); return; }
+  fetch("/api/tenant/" + encodeURIComponent(slug), { headers: headers() })
+    .then(r => { if (!r.ok) throw new Error("auth"); return r.json(); })
+    .then(data => { shopData = data; render(); })
+    .catch(() => {
+      sessionStorage.removeItem(storeKey);
+      showLogin("編集キーが違うか、このお店の編集キーが未発行です。運営にご確認ください。", true);
+    });
+}
+
+document.getElementById("login-btn").addEventListener("click", function () {
+  const v = document.getElementById("tenant-key").value.trim();
+  if (!v) { showLogin("編集キーを入力してください。", true); return; }
+  sessionStorage.setItem(storeKey, v);
+  loadShop();
+});
+document.getElementById("tenant-key").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") document.getElementById("login-btn").click();
+});
+document.getElementById("logout-btn").addEventListener("click", function () {
+  sessionStorage.removeItem(storeKey);
+  location.reload();
+});
+
+document.getElementById("shop-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+  const msg = document.getElementById("shop-msg");
+  fetch("/api/tenant/" + encodeURIComponent(slug), {
+    method: "PUT", headers: headers(),
+    body: JSON.stringify({ tagline: document.getElementById("s-tagline").value, message: document.getElementById("s-message").value })
+  }).then(r => r.json()).then(d => {
+    msg.className = "msg " + (d.ok ? "ok" : "error");
+    msg.textContent = d.ok ? "保存しました。" : (d.error || "失敗しました");
+  }).catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
+});
+
+document.getElementById("add-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+  const msg = document.getElementById("add-msg");
+  fetch("/api/tenant/" + encodeURIComponent(slug) + "/products", {
+    method: "POST", headers: headers(),
+    body: JSON.stringify({
+      name: document.getElementById("a-name").value,
+      price: Number(document.getElementById("a-price").value),
+      description: document.getElementById("a-desc").value,
+      image: document.getElementById("a-image").value
+    })
+  }).then(r => r.json()).then(d => {
+    msg.className = "msg " + (d.ok ? "ok" : "error");
+    msg.textContent = d.ok ? "商品を追加しました。" : (d.error || "失敗しました");
+    if (d.ok) { this.reset(); loadShop(); }
+  }).catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
+});
+
+loadShop();
+</script>
+</body>
+</html>
