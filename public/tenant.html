@@ -56,8 +56,8 @@
       <input id="a-price" type="number" required min="1" max="10000000" step="1">
       <label>説明</label>
       <textarea id="a-desc" rows="2" maxlength="500"></textarea>
-      <label>商品画像のURL（任意）</label>
-      <input id="a-image" type="url" placeholder="https://…" maxlength="500">
+      <label>商品写真（任意）</label>
+      <div id="a-photo"></div>
       <div class="cta-row"><button class="btn" type="submit">商品を追加</button></div>
       <p class="msg" id="add-msg"></p>
     </form>
@@ -66,8 +66,11 @@
 
 <footer>つどい百貨店（プロトタイプ）</footer>
 
+<script src="image-upload.js"></script>
 <script>
 const slug = new URLSearchParams(window.location.search).get("slug");
+const addPhoto = createPhotoField("");
+document.getElementById("a-photo").appendChild(addPhoto.element);
 const storeKey = "tenant-key-" + slug;
 let shopData = null;
 
@@ -111,7 +114,13 @@ function productCard(p) {
   const nameInput = field("商品名", p.name, "text", 60);
   const priceInput = field("価格（円）", p.price, "number");
   const descInput = field("説明", p.description, "textarea", 500);
-  const imageInput = field("商品画像のURL（任意）", p.image, "url", 500);
+
+  const photoLabel = document.createElement("label");
+  photoLabel.textContent = "商品写真（任意）";
+  photoLabel.style.cssText = "display:block;font-size:12px;font-weight:700;margin:10px 0 4px";
+  div.appendChild(photoLabel);
+  const photo = createPhotoField(p.image || "");
+  div.appendChild(photo.element);
 
   const msg = document.createElement("p");
   msg.className = "msg";
@@ -122,7 +131,7 @@ function productCard(p) {
   save.addEventListener("click", function () {
     fetch("/api/tenant/" + encodeURIComponent(slug) + "/products/" + p.id, {
       method: "PUT", headers: headers(),
-      body: JSON.stringify({ name: nameInput.value, price: Number(priceInput.value), description: descInput.value, image: imageInput.value })
+      body: JSON.stringify({ name: nameInput.value, price: Number(priceInput.value), description: descInput.value, image: photo.getValue() })
     }).then(r => r.json()).then(d => {
       msg.className = "msg " + (d.ok ? "ok" : "error");
       msg.textContent = d.ok ? "保存しました。お店ページに反映されています。" : (d.error || "失敗しました");
@@ -213,12 +222,12 @@ document.getElementById("add-form").addEventListener("submit", function (e) {
       name: document.getElementById("a-name").value,
       price: Number(document.getElementById("a-price").value),
       description: document.getElementById("a-desc").value,
-      image: document.getElementById("a-image").value
+      image: addPhoto.getValue()
     })
   }).then(r => r.json()).then(d => {
     msg.className = "msg " + (d.ok ? "ok" : "error");
     msg.textContent = d.ok ? "商品を追加しました。" : (d.error || "失敗しました");
-    if (d.ok) { this.reset(); loadShop(); }
+    if (d.ok) { this.reset(); addPhoto.reset(); loadShop(); }
   }).catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
 });
 

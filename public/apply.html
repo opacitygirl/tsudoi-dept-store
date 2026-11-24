@@ -47,6 +47,8 @@
     <input name="productPrice" type="number" required min="100" max="1000000" step="10">
     <label>商品の説明</label>
     <textarea name="productDescription" rows="2" maxlength="200"></textarea>
+    <label>商品写真（任意）</label>
+    <div id="product-photo"></div>
     <p class="hint">※ 承認後、商品は追加できます。発送・返品・お客様対応は各お店の責任で行います。</p>
     <div class="cta-row"><button class="btn" type="submit">申し込む</button></div>
     <p class="msg" id="form-msg"></p>
@@ -56,7 +58,10 @@
 
 <footer>つどい百貨店（プロトタイプ）</footer>
 
+<script src="image-upload.js"></script>
 <script>
+const applyPhoto = createPhotoField("");
+document.getElementById("product-photo").appendChild(applyPhoto.element);
 document.getElementById("apply-form").addEventListener("submit", function (e) {
   e.preventDefault();
   const f = new FormData(this);
@@ -72,7 +77,8 @@ document.getElementById("apply-form").addEventListener("submit", function (e) {
     product: {
       name: f.get("productName"),
       price: Number(f.get("productPrice")),
-      description: f.get("productDescription")
+      description: f.get("productDescription"),
+      image: applyPhoto.getValue()
     }
   };
   fetch("/api/applications", {
@@ -86,6 +92,7 @@ document.getElementById("apply-form").addEventListener("submit", function (e) {
         msg.className = "msg ok";
         msg.textContent = "申込を受け付けました。百貨店の承認をお待ちください。";
         document.getElementById("apply-form").reset();
+        applyPhoto.reset();
       } else {
         msg.className = "msg error";
         msg.textContent = data.error || "送信に失敗しました";

@@ -20,8 +20,14 @@
 </header>
 
 <div class="hero">
-  <h1>ネットショップの百貨店</h1>
+  <p class="eyebrow">TSUDOI DEPARTMENT STORE</p>
+  <h1>つどい百貨店</h1>
+  <div class="ornament">― ◆ ―</div>
   <p>ここは、誰でもお店を出せる百貨店です。<br>各テナントが店名も商品も自由に決めて、それぞれの「お店」で営業しています。</p>
+  <div class="hero-cta">
+    <a class="btn" href="#shops">フロアガイドを見る</a>
+    <a class="btn ghost" href="apply.html">出店を申し込む</a>
+  </div>
 </div>
 
 <main>
@@ -93,6 +99,7 @@ function renderShops() {
       '<div class="shop-meta">' +
         '<div class="tagline">' + shop.tagline + "</div>" +
         "<div>店主：" + shop.owner + " ／ 商品 " + shop.products.length + "点</div>" +
+        '<span class="enter">お店に入る →</span>' +
       "</div>";
     card.addEventListener("click", function () {
       window.location.href = "shop.html?slug=" + shop.slug;

@@ -43,8 +43,8 @@
     <input id="p-price" type="number" required min="100" max="1000000" step="10">
     <label>説明</label>
     <textarea id="p-desc" rows="2" maxlength="200"></textarea>
-    <label>商品画像のURL（任意）</label>
-    <input id="p-image" type="url" placeholder="https://…" maxlength="500">
+    <label>商品写真（任意）</label>
+    <div id="p-photo"></div>
     <div class="cta-row"><button class="btn" type="submit">商品を追加</button></div>
     <p class="msg" id="product-msg"></p>
   </form>
@@ -52,7 +52,10 @@
 
 <footer>つどい百貨店（プロトタイプ）</footer>
 
+<script src="image-upload.js"></script>
 <script>
+const adminPhoto = createPhotoField("");
+document.getElementById("p-photo").appendChild(adminPhoto.element);
 function key() { return document.getElementById("admin-key").value; }
 function headers() { return { "Content-Type": "application/json", "x-admin-key": key() }; }
 
@@ -190,14 +193,14 @@ document.getElementById("product-form").addEventListener("submit", function (e) 
       name: document.getElementById("p-name").value,
       price: Number(document.getElementById("p-price").value),
       description: document.getElementById("p-desc").value,
-      image: document.getElementById("p-image").value
+      image: adminPhoto.getValue()
     })
   })
     .then(r => r.json())
     .then(d => {
       msg.className = d.ok ? "msg ok" : "msg error";
       msg.textContent = d.ok ? "商品を追加しました。" : (d.error || "失敗しました");
-      if (d.ok) this.reset();
+      if (d.ok) { this.reset(); adminPhoto.reset(); }
     })
     .catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
 });
