@@ -21,6 +21,7 @@ if (process.env.STRIPE_SECRET_KEY) {
 const DATA_DIR = path.join(__dirname, "data");
 const SHOPS_FILE = path.join(DATA_DIR, "shops.json");
 const APPS_FILE = path.join(DATA_DIR, "applications.json");
+const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
 
 // ---- データ保存 ----
 // DATABASE_URL がある場合：起動時にDBから読み込んでメモリに持ち、変更のたびにDBへ書き戻す。
@@ -28,7 +29,7 @@ const APPS_FILE = path.join(DATA_DIR, "applications.json");
 let USE_DB = Boolean(process.env.DATABASE_URL);
 let pool = null;
 const memCache = {};
-const KEY_OF_FILE = { [SHOPS_FILE]: "shops", [APPS_FILE]: "applications" };
+const KEY_OF_FILE = { [SHOPS_FILE]: "shops", [APPS_FILE]: "applications", [ORDERS_FILE]: "orders" };
 
 function readJson(file, fallback) {
   if (USE_DB) return memCache[file] !== undefined ? memCache[file] : fallback;
@@ -70,7 +71,7 @@ async function initData() {
     // テーブルが既にある等で作成が不要な場合は、続く読み込みで成否を判定する
     console.error("[db] テーブル作成で警告: " + e.message);
   }
-  for (const file of [SHOPS_FILE, APPS_FILE]) {
+  for (const file of [SHOPS_FILE, APPS_FILE, ORDERS_FILE]) {
     const key = KEY_OF_FILE[file];
     const r = await pool.query("SELECT value FROM tsudoi_store WHERE key = $1", [key]);
     if (r.rows.length) {
@@ -184,6 +185,77 @@ function publicShop(shop) {
   return { ...rest, stripeLinked: Boolean(stripeAccountId) };
 }
 
+// ---- Stripe Webhook（注文の記録と通知） ----
+// 署名検証には生のボディが必要なため、express.json() より前に登録する。
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
+
+function formatAddress(details) {
+  if (!details || !details.address) return "";
+  const a = details.address;
+  const parts = [a.postal_code ? "〒" + a.postal_code : "", a.state || "", a.city || "", a.line1 || "", a.line2 || ""].filter(Boolean).join(" ");
+  return (details.name ? details.name + " / " : "") + parts;
+}
+
+app.post("/webhook/stripe", express.raw({ type: "application/json" }), async (req, res) => {
+  if (!stripe || !WEBHOOK_SECRET) {
+    console.error("[webhook] Stripeまたは STRIPE_WEBHOOK_SECRET が未設定です");
+    return res.status(503).send("webhook not configured");
+  }
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], WEBHOOK_SECRET);
+  } catch (e) {
+    console.error("[webhook] 署名検証に失敗: " + e.message);
+    return res.status(400).send("invalid signature");
+  }
+  if (event.type !== "checkout.session.completed") return res.json({ received: true });
+
+  const session = event.data.object;
+  const orders = readJson(ORDERS_FILE, []);
+  if (orders.some((o) => o.sessionId === session.id)) {
+    return res.json({ received: true, duplicate: true });
+  }
+
+  const meta = session.metadata || {};
+  let items = [];
+  try { items = JSON.parse(meta.items_json || "[]"); } catch (e) { items = []; }
+  const shipDetails = (session.collected_information && session.collected_information.shipping_details) || session.shipping_details || null;
+  const cust = session.customer_details || {};
+  const order = {
+    id: "ord-" + Date.now().toString(36),
+    createdAt: new Date().toISOString(),
+    sessionId: session.id,
+    shopSlug: meta.shop_slug || "",
+    shopName: meta.shop_name || "",
+    items,
+    summary: meta.cart_summary || items.map((i) => i.name + "×" + i.qty).join("、"),
+    total: session.amount_total || 0,
+    currency: session.currency || "jpy",
+    buyerName: (shipDetails && shipDetails.name) || cust.name || "",
+    email: cust.email || "",
+    phone: cust.phone || "",
+    address: formatAddress(shipDetails),
+    paymentStatus: session.payment_status || ""
+  };
+  orders.push(order);
+  writeJson(ORDERS_FILE, orders);
+  console.log("[order] 注文を記録: " + order.shopName + " / " + order.summary + " / ¥" + Number(order.total).toLocaleString("ja-JP"));
+
+  const itemLines = items.length
+    ? items.map((i) => `・${i.name} × ${i.qty}（¥${Number(i.price * i.qty).toLocaleString("ja-JP")}）`).join("\n")
+    : "・" + order.summary;
+  const body =
+    `つどい百貨店で注文が入りました。\n\nお店: ${order.shopName}\n注文日時: ${new Date(order.createdAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}\n\n【商品】\n${itemLines}\n合計: ¥${Number(order.total).toLocaleString("ja-JP")}\n\n【購入者】\n名前: ${order.buyerName}\nメール: ${order.email}\n電話: ${order.phone}\n\n【配送先】\n${order.address || "（住所の取得ができませんでした。Stripeの管理画面でご確認ください）"}\n\n発送の手配をお願いします。注文一覧は管理画面でも確認できます。\n\nつどい百貨店`;
+  const subject = `【つどい百貨店】注文が入りました｜${order.shopName}`;
+  await sendMail(NOTIFY_EMAIL, subject, body);
+  const shops = readJson(SHOPS_FILE, []);
+  const shop = shops.find((s) => s.slug === order.shopSlug);
+  if (shop && shop.contactEmail && shop.contactEmail !== NOTIFY_EMAIL) {
+    await sendMail(shop.contactEmail, subject, body);
+  }
+  res.json({ received: true });
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -214,7 +286,7 @@ app.post("/api/applications", async (req, res) => {
     floor: floor || "1F",
     tagline: tagline || "",
     message: message || "",
-    product: { name: product.name, price: Number(product.price), description: product.description || "" },
+    product: { name: product.name, price: Number(product.price), description: product.description || "", image: product.image && /^https?:\/\//.test(product.image) ? product.image : "" },
     status: "pending",
     createdAt: new Date().toISOString()
   };
@@ -231,6 +303,10 @@ app.post("/api/applications", async (req, res) => {
 // ---- 管理（百貨店運営） ----
 app.get("/api/admin/applications", requireAdmin, (req, res) => {
   res.json(readJson(APPS_FILE, []));
+});
+
+app.get("/api/admin/orders", requireAdmin, (req, res) => {
+  res.json(readJson(ORDERS_FILE, []));
 });
 
 function approveApplication(id) {
@@ -255,7 +331,7 @@ function approveApplication(id) {
     accent: "#c9a227",
     contactEmail: entry.email,
     stripeAccountId: null,
-    products: [{ id: 1, name: entry.product.name, price: entry.product.price, description: entry.product.description }]
+    products: [{ id: 1, name: entry.product.name, price: entry.product.price, description: entry.product.description, image: entry.product.image || "" }]
   };
   shops.push(shop);
   entry.status = "approved";
@@ -327,10 +403,11 @@ app.post("/api/admin/shops/:slug/products", requireAdmin, (req, res) => {
   const shops = readJson(SHOPS_FILE, []);
   const shop = shops.find((s) => s.slug === req.params.slug);
   if (!shop) return res.status(404).json({ error: "お店が見つかりません" });
-  const { name, price, description } = req.body || {};
+  const { name, price, description, image } = req.body || {};
   if (!name || !price) return res.status(400).json({ error: "商品名と価格が必要です" });
   const id = shop.products.length ? Math.max(...shop.products.map((p) => p.id)) + 1 : 1;
-  shop.products.push({ id, name, price: Number(price), description: description || "" });
+  const imageUrl = image && /^https?:\/\//.test(image) ? image : "";
+  shop.products.push({ id, name, price: Number(price), description: description || "", image: imageUrl });
   writeJson(SHOPS_FILE, shops);
   res.status(201).json({ ok: true, id });
 });
@@ -349,12 +426,14 @@ app.post("/api/shops/:slug/create-checkout-session", async (req, res) => {
   }
 
   const lineItems = [];
+  const itemsMeta = [];
   let total = 0;
   for (const item of cart) {
     const product = shop.products.find((p) => p.id === Number(item.id));
     if (!product) return res.status(400).json({ error: "商品が見つかりません: " + item.id });
     const qty = Math.max(1, Math.min(10, Number(item.quantity) || 1));
     total += product.price * qty;
+    itemsMeta.push({ name: product.name, qty, price: product.price });
     lineItems.push({
       price_data: {
         currency: "jpy",
@@ -372,7 +451,14 @@ app.post("/api/shops/:slug/create-checkout-session", async (req, res) => {
     mode: "payment",
     success_url: `${baseUrl}/shop.html?slug=${shop.slug}&paid=1`,
     cancel_url: `${baseUrl}/shop.html?slug=${shop.slug}`,
-    metadata: { shop_slug: shop.slug, shop_name: shop.name }
+    shipping_address_collection: { allowed_countries: ["JP"] },
+    phone_number_collection: { enabled: true },
+    metadata: {
+      shop_slug: shop.slug,
+      shop_name: shop.name,
+      cart_summary: itemsMeta.map((i) => i.name + "×" + i.qty).join("、").slice(0, 480),
+      items_json: JSON.stringify(itemsMeta).length <= 480 ? JSON.stringify(itemsMeta) : ""
+    }
   };
 
   // テナントがStripe連携済みなら、売上はテナントへ・手数料は百貨店へ（Stripe Connect）
@@ -398,6 +484,6 @@ initData()
   })
   .finally(() => {
     app.listen(PORT, () => {
-      console.log("つどい百貨店サーバー起動: port " + PORT + " / stripe: " + (stripe ? "設定済み" : "未設定") + " / 手数料: " + FEE_PERCENT + "%" + " / mail: " + (mailer ? "設定済み（通知先: " + NOTIFY_EMAIL + "）" : "未設定") + " / data: " + (USE_DB ? "データベース" : "JSONファイル"));
+      console.log("つどい百貨店サーバー起動: port " + PORT + " / stripe: " + (stripe ? "設定済み" : "未設定") + " / 手数料: " + FEE_PERCENT + "%" + " / mail: " + (mailer || BREVO_API_KEY ? "設定済み（通知先: " + NOTIFY_EMAIL + "）" : "未設定") + " / webhook: " + (WEBHOOK_SECRET ? "設定済み" : "未設定") + " / data: " + (USE_DB ? "データベース" : "JSONファイル"));
     });
   });

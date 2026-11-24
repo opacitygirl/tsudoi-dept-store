@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>出店申込｜つどい百貨店</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="logo" href="index.html">つどい百貨店</a>
+  <nav><a href="index.html#shops">フロアガイド</a></nav>
+</header>
+
+<main>
+  <h2 class="section-title">出店申込</h2>
+  <p style="line-height:1.9;font-size:14px">店名も、売る商品も、あなたが自由に決められます。百貨店が内容を確認して承認すると、あなたのお店ページが自動で生まれます。</p>
+
+  <form class="form-card" id="apply-form">
+    <label>店名 *</label>
+    <input name="shopName" required maxlength="40" placeholder="例：星空レコード">
+    <label>お名前（店主名）*</label>
+    <input name="ownerName" required maxlength="40">
+    <label>メールアドレス *</label>
+    <input name="email" type="email" required placeholder="you@example.com">
+    <label>ジャンル</label>
+    <input name="genre" maxlength="20" placeholder="例：音楽、食品、雑貨">
+    <label>希望フロア</label>
+    <select name="floor">
+      <option value="B1F">B1F 食品</option>
+      <option value="1F" selected>1F ファッション・雑貨</option>
+      <option value="2F">2F 住まい・日用品</option>
+      <option value="3F">3F 本・文具</option>
+      <option value="4F">4F 美容・健康</option>
+      <option value="5F">5F 趣味・エンタメ</option>
+      <option value="RF">RF 催事場</option>
+    </select>
+    <label>お店の一言紹介</label>
+    <input name="tagline" maxlength="80" placeholder="例：シティポップの名盤を集めました">
+    <label>店主のことば</label>
+    <textarea name="message" rows="3" maxlength="300"></textarea>
+    <label>最初の商品の名前 *</label>
+    <input name="productName" required maxlength="60">
+    <label>価格（円）*</label>
+    <input name="productPrice" type="number" required min="100" max="1000000" step="10">
+    <label>商品の説明</label>
+    <textarea name="productDescription" rows="2" maxlength="200"></textarea>
+    <label>商品画像のURL（任意）</label>
+    <input name="productImage" type="url" maxlength="500" placeholder="https://…">
+    <p class="hint">※ 承認後、商品は追加できます。発送・返品・お客様対応は各お店の責任で行います。</p>
+    <div class="cta-row"><button class="btn" type="submit">申し込む</button></div>
+    <p class="msg" id="form-msg"></p>
+  </form>
+  <p style="margin-top:20px"><a href="index.html">← 百貨店トップに戻る</a></p>
+</main>
+
+<footer>つどい百貨店（プロトタイプ）</footer>
+
+<script>
+document.getElementById("apply-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+  const f = new FormData(this);
+  const msg = document.getElementById("form-msg");
+  const body = {
+    shopName: f.get("shopName"),
+    ownerName: f.get("ownerName"),
+    email: f.get("email"),
+    genre: f.get("genre"),
+    floor: f.get("floor"),
+    tagline: f.get("tagline"),
+    message: f.get("message"),
+    product: {
+      name: f.get("productName"),
+      price: Number(f.get("productPrice")),
+      description: f.get("productDescription"),
+      image: f.get("productImage")
+    }
+  };
+  fetch("/api/applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        msg.className = "msg ok";
+        msg.textContent = "申込を受け付けました。百貨店の承認をお待ちください。";
+        document.getElementById("apply-form").reset();
+      } else {
+        msg.className = "msg error";
+        msg.textContent = data.error || "送信に失敗しました";
+      }
+    })
+    .catch(() => { msg.className = "msg error"; msg.textContent = "サーバーに接続できませんでした。"; });
+});
+</script>
+</body>
+</html>

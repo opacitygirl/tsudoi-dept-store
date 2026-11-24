@@ -1,0 +1,159 @@
+* { box-sizing: border-box; }
+:root {
+  --bg: #faf6ee;
+  --surface: #ffffff;
+  --ink: #22304a;
+  --ink-dim: #6b7280;
+  --gold: #c9a227;
+  --navy: #1d2a4a;
+  --border: #e3dcc9;
+}
+body {
+  margin: 0;
+  font-family: "Noto Serif JP", serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+a { color: var(--navy); }
+.site-header {
+  background: var(--navy);
+  color: #f5eeda;
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.site-header .logo {
+  font-family: "Shippori Mincho", serif;
+  font-size: 24px;
+  letter-spacing: 4px;
+  color: #f5eeda;
+  text-decoration: none;
+}
+.site-header nav a {
+  color: #f5eeda;
+  text-decoration: none;
+  margin-left: 18px;
+  font-size: 14px;
+}
+.site-header nav a:hover { color: var(--gold); }
+.hero {
+  text-align: center;
+  padding: 56px 20px 40px;
+  background: linear-gradient(180deg, #2a3a5f 0%, #1d2a4a 70%, #16203a 100%);
+  color: #f5eeda;
+}
+.hero h1 {
+  font-family: "Shippori Mincho", serif;
+  font-size: 34px;
+  letter-spacing: 3px;
+  margin: 0 0 12px;
+}
+.hero p { color: #cfd6e4; margin: 0; line-height: 1.9; font-size: 15px; }
+main { max-width: 1020px; margin: 0 auto; padding: 24px 20px 56px; }
+.section-title {
+  font-family: "Shippori Mincho", serif;
+  font-size: 22px;
+  letter-spacing: 2px;
+  border-bottom: 2px solid var(--gold);
+  padding-bottom: 8px;
+  margin: 36px 0 18px;
+}
+.floor-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.floor-btn {
+  border: 1px solid var(--navy);
+  background: var(--surface);
+  color: var(--navy);
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.floor-btn.active { background: var(--navy); color: #f5eeda; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+.shop-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.shop-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(29,42,74,.14); }
+.shop-banner { padding: 22px 18px; color: #fff; min-height: 96px; }
+.shop-banner .floor { font-size: 12px; letter-spacing: 2px; opacity: .85; }
+.shop-banner h3 { margin: 6px 0 0; font-size: 19px; font-family: "Shippori Mincho", serif; letter-spacing: 1px; }
+.shop-meta { padding: 14px 18px; font-size: 13px; color: var(--ink-dim); line-height: 1.8; }
+.shop-meta .tagline { color: var(--ink); font-size: 14px; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.step { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.step .num { color: var(--gold); font-weight: 700; font-size: 20px; font-family: "Shippori Mincho", serif; }
+.step h4 { margin: 6px 0; font-size: 15px; }
+.step p { margin: 0; font-size: 13px; color: var(--ink-dim); line-height: 1.8; }
+.cta-row { text-align: center; margin: 30px 0 6px; }
+.btn {
+  display: inline-block;
+  background: var(--gold);
+  color: #1d2a4a;
+  font-weight: 700;
+  border: none;
+  border-radius: 24px;
+  padding: 12px 30px;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover { opacity: .88; }
+.btn.sub { background: var(--navy); color: #f5eeda; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+footer { border-top: 1px solid var(--border); text-align: center; padding: 26px 16px; color: var(--ink-dim); font-size: 13px; line-height: 2; }
+footer a { margin: 0 10px; }
+
+/* 店舗ページ */
+.shop-hero { padding: 40px 24px; color: #fff; text-align: center; }
+.shop-hero h1 { font-family: "Shippori Mincho", serif; letter-spacing: 2px; margin: 0 0 8px; font-size: 30px; }
+.shop-hero p { margin: 4px 0; opacity: .92; line-height: 1.8; font-size: 14px; }
+.owner-msg { background: var(--surface); border-left: 4px solid var(--gold); padding: 14px 18px; margin: 22px 0; line-height: 1.9; font-size: 14px; }
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+.product-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; text-align: center; }
+.product-card .thumb { font-size: 40px; line-height: 1.2; }
+.product-card .thumb img { width: 100%; height: 160px; object-fit: cover; border-radius: 6px; display: block; }
+.product-card h3 { font-size: 15px; margin: 10px 0 4px; }
+.product-card .desc { font-size: 12px; color: var(--ink-dim); line-height: 1.7; min-height: 40px; }
+.product-card .price { font-weight: 700; font-size: 16px; margin: 6px 0 10px; }
+.cart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-top: 28px; }
+.cart-box h3 { margin: 0 0 10px; }
+.cart-line { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.cart-total { font-weight: 700; text-align: right; margin: 12px 0; font-size: 16px; }
+.paid-banner { background: #e7f6e7; border: 1px solid #9ccc9c; border-radius: 10px; padding: 16px; margin: 20px 0; text-align: center; }
+
+/* フォーム */
+.form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; max-width: 640px; margin: 0 auto; }
+.form-card label { display: block; font-size: 13px; font-weight: 700; margin: 16px 0 6px; }
+.form-card input, .form-card select, .form-card textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+  font-family: inherit; font-size: 14px; background: #fffdf8;
+}
+.form-card .hint { font-size: 12px; color: var(--ink-dim); margin-top: 4px; }
+.msg { margin: 14px 0; font-size: 14px; }
+.msg.error { color: #a31621; }
+.msg.ok { color: #1e7a1e; }
+
+/* 管理画面 */
+.app-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin: 12px 0; font-size: 14px; line-height: 1.8; }
+.app-card .status { font-size: 12px; font-weight: 700; }
+.status.pending { color: #b8860b; }
+.status.approved { color: #1e7a1e; }
+.status.rejected { color: #a31621; }
+.app-card button { margin-right: 8px; margin-top: 8px; }
+.small-btn { border: 1px solid var(--navy); background: var(--surface); border-radius: 16px; padding: 6px 16px; font-family: inherit; cursor: pointer; font-size: 13px; }
+.small-btn:hover { background: var(--navy); color: #f5eeda; }
+
+@media (max-width: 600px) {
+  .hero h1 { font-size: 25px; }
+  .site-header .logo { font-size: 19px; }
+}
