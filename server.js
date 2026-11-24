@@ -1,6 +1,7 @@
 // つどい百貨店（ネットショップの百貨店）サーバー
 // 役割：店舗データの管理、出店申込の受付・承認、店舗ごとの決済（Stripe）
 // 環境変数：STRIPE_SECRET_KEY / ADMIN_KEY / PLATFORM_FEE_PERCENT（任意・既定0）/ BASE_URL（任意）
+// データ保存：DATABASE_URL（Postgres接続文字列）があればデータベースに保存し、再起動・再デプロイでも消えない。なければ従来のJSONファイル保存。
 // メール通知用：SMTP_USER / SMTP_PASS（Gmailアプリパスワード）/ NOTIFY_EMAIL（通知先・任意）
 const express = require("express");
 const fs = require("fs");
@@ -21,15 +22,68 @@ const DATA_DIR = path.join(__dirname, "data");
 const SHOPS_FILE = path.join(DATA_DIR, "shops.json");
 const APPS_FILE = path.join(DATA_DIR, "applications.json");
 
+// ---- データ保存 ----
+// DATABASE_URL がある場合：起動時にDBから読み込んでメモリに持ち、変更のたびにDBへ書き戻す。
+// ない場合：従来どおりJSONファイルに保存する（ローカル確認用）。
+let USE_DB = Boolean(process.env.DATABASE_URL);
+let pool = null;
+const memCache = {};
+const KEY_OF_FILE = { [SHOPS_FILE]: "shops", [APPS_FILE]: "applications" };
+
 function readJson(file, fallback) {
+  if (USE_DB) return memCache[file] !== undefined ? memCache[file] : fallback;
   try {
     return JSON.parse(fs.readFileSync(file, "utf-8"));
   } catch (e) {
     return fallback;
   }
 }
+let persistChain = Promise.resolve();
+function persistToDb(key, data) {
+  persistChain = persistChain.then(async () => {
+    try {
+      await pool.query(
+        "INSERT INTO tsudoi_store(key, value, updated_at) VALUES($1, $2::jsonb, now()) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+        [key, JSON.stringify(data)]
+      );
+    } catch (e) {
+      console.error("[db] 保存に失敗: " + e.message);
+    }
+  });
+  return persistChain;
+}
 function writeJson(file, data) {
+  if (USE_DB) {
+    memCache[file] = data;
+    persistToDb(KEY_OF_FILE[file], data);
+    return;
+  }
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+}
+async function initData() {
+  if (!USE_DB) return;
+  const { Pool } = require("pg");
+  pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  try {
+    await pool.query("CREATE TABLE IF NOT EXISTS tsudoi_store (key TEXT PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+  } catch (e) {
+    // テーブルが既にある等で作成が不要な場合は、続く読み込みで成否を判定する
+    console.error("[db] テーブル作成で警告: " + e.message);
+  }
+  for (const file of [SHOPS_FILE, APPS_FILE]) {
+    const key = KEY_OF_FILE[file];
+    const r = await pool.query("SELECT value FROM tsudoi_store WHERE key = $1", [key]);
+    if (r.rows.length) {
+      memCache[file] = r.rows[0].value;
+      console.log("[db] 読み込み: " + key + "（" + (Array.isArray(r.rows[0].value) ? r.rows[0].value.length : 0) + "件）");
+    } else {
+      let seed = [];
+      try { seed = JSON.parse(fs.readFileSync(file, "utf-8")); } catch (e) { /* 初期データなし */ }
+      memCache[file] = seed;
+      await pool.query("INSERT INTO tsudoi_store(key, value) VALUES($1, $2::jsonb)", [key, JSON.stringify(seed)]);
+      console.log("[db] 初期データを投入: " + key + "（" + (Array.isArray(seed) ? seed.length : 0) + "件）");
+    }
+  }
 }
 function slugify(name) {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -298,6 +352,13 @@ app.post("/api/shops/:slug/create-checkout-session", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log("つどい百貨店サーバー起動: port " + PORT + " / stripe: " + (stripe ? "設定済み" : "未設定") + " / 手数料: " + FEE_PERCENT + "%" + " / mail: " + (mailer ? "設定済み（通知先: " + NOTIFY_EMAIL + "）" : "未設定"));
-});
+initData()
+  .catch((e) => {
+    console.error("[db] 初期化に失敗しました: " + e.message + "（JSONファイル保存に切り替えて起動します）");
+    USE_DB = false;
+  })
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log("つどい百貨店サーバー起動: port " + PORT + " / stripe: " + (stripe ? "設定済み" : "未設定") + " / 手数料: " + FEE_PERCENT + "%" + " / mail: " + (mailer ? "設定済み（通知先: " + NOTIFY_EMAIL + "）" : "未設定") + " / data: " + (USE_DB ? "データベース" : "JSONファイル"));
+    });
+  });
