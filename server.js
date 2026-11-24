@@ -485,20 +485,49 @@ app.post("/api/admin/shops/:slug/tenant-key", requireAdmin, (req, res) => {
   });
 });
 
+// 運営用：お店の削除（閉店処理）。注文履歴と申込記録は残る。
+app.delete("/api/admin/shops/:slug", requireAdmin, (req, res) => {
+  const shops = readJson(SHOPS_FILE, []);
+  const shop = shops.find((s) => s.slug === req.params.slug);
+  if (!shop) return res.status(404).json({ error: "お店が見つかりません" });
+  writeJson(SHOPS_FILE, shops.filter((s) => s.slug !== req.params.slug));
+  console.log("[shop] 運営がお店を削除しました: " + shop.name + "（" + req.params.slug + "）");
+  res.json({ ok: true, name: shop.name });
+});
+
 // ---- テナント（店主）自身の編集 ----
 app.get("/api/tenant/:slug", requireTenant, (req, res) => {
   const s = req.tenantShop;
   res.json({
     slug: s.slug, name: s.name, owner: s.owner, genre: s.genre, floor: s.floor,
-    tagline: s.tagline || "", message: s.message || "", products: s.products || []
+    tagline: s.tagline || "", message: s.message || "",
+    color: s.color || "#1d2a4a",
+    headerImage: s.headerImage || "", profileImage: s.profileImage || "",
+    products: s.products || []
   });
 });
 
 app.put("/api/tenant/:slug", requireTenant, (req, res) => {
-  const { tagline, message } = req.body || {};
+  const { tagline, message, color, headerImage, profileImage } = req.body || {};
   if (tagline !== undefined) req.tenantShop.tagline = String(tagline).slice(0, 120);
   if (message !== undefined) req.tenantShop.message = String(message).slice(0, 1000);
+  if (color !== undefined) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(String(color))) {
+      return res.status(400).json({ error: "色の形式が正しくありません" });
+    }
+    req.tenantShop.color = String(color).toLowerCase();
+  }
+  if (headerImage !== undefined) req.tenantShop.headerImage = cleanImage(headerImage);
+  if (profileImage !== undefined) req.tenantShop.profileImage = cleanImage(profileImage);
   writeJson(SHOPS_FILE, req.allShops);
+  res.json({ ok: true });
+});
+
+// テナント自身による閉店（撤退）：自分のお店を削除する。注文履歴は百貨店側に残る。
+app.delete("/api/tenant/:slug", requireTenant, (req, res) => {
+  const remaining = req.allShops.filter((s) => s.slug !== req.params.slug);
+  writeJson(SHOPS_FILE, remaining);
+  console.log("[shop] テナントが閉店しました: " + req.tenantShop.name + "（" + req.params.slug + "）");
   res.json({ ok: true });
 });
 
