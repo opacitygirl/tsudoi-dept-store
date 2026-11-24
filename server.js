@@ -105,18 +105,57 @@ if (process.env.SMTP_USER && process.env.SMTP_PASS) {
 }
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || process.env.SMTP_USER || "";
 
+// Brevo（メール送信専用サービス）のAPI送信。BREVO_API_KEY があればこちらを優先する。
+// SMTPのポートはRender無料プランで塞がれているため、HTTPS（443）で送るこの方式が確実。
+// 送信元アドレス（MAIL_FROM、未設定なら SMTP_USER）は Brevo 側で認証済みの必要がある。
+const BREVO_API_KEY = process.env.BREVO_API_KEY || "";
+const MAIL_FROM = process.env.MAIL_FROM || process.env.SMTP_USER || "";
+
+async function sendViaBrevo(to, subject, text) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+        accept: "application/json"
+      },
+      body: JSON.stringify({
+        sender: { name: "つどい百貨店", email: MAIL_FROM },
+        to: [{ email: to }],
+        subject,
+        textContent: text
+      }),
+      signal: ctrl.signal
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error("Brevo API " + res.status + ": " + body.slice(0, 200));
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function baseUrlOf(req) {
   return process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
 
 async function sendMail(to, subject, text) {
-  if (!mailer || !to) {
+  const useBrevo = !!BREVO_API_KEY;
+  if ((!useBrevo && !mailer) || !to) {
     console.log("[mail] 未設定または宛先なしのため送信スキップ: " + subject);
     return;
   }
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await mailer.sendMail({ from: process.env.SMTP_USER, to, subject, text });
+      if (useBrevo) {
+        await sendViaBrevo(to, subject, text);
+      } else {
+        await mailer.sendMail({ from: process.env.SMTP_USER, to, subject, text });
+      }
       console.log("[mail] 送信しました（" + attempt + "回目）: " + subject + " -> " + to);
       return;
     } catch (e) {
