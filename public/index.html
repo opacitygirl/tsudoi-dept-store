@@ -101,6 +101,13 @@ function renderShops() {
         "<div>店主：" + shop.owner + " ／ 商品 " + shop.products.length + "点</div>" +
         '<span class="enter">お店に入る →</span>' +
       "</div>";
+    if (shop.headerImage) {
+      const banner = card.querySelector(".shop-banner");
+      const safeUrl = String(shop.headerImage).replace(/"/g, "%22");
+      banner.style.backgroundImage = 'linear-gradient(rgba(10,14,26,.38), rgba(10,14,26,.5)), url("' + safeUrl + '")';
+      banner.style.backgroundSize = "cover";
+      banner.style.backgroundPosition = "center";
+    }
     card.addEventListener("click", function () {
       window.location.href = "shop.html?slug=" + shop.slug;
     });

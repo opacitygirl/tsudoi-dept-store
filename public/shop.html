@@ -18,6 +18,7 @@
 </header>
 
 <div id="shop-hero" class="shop-hero" style="background:#1d2a4a">
+  <img id="shop-avatar" alt="" style="display:none;width:84px;height:84px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.35);margin-bottom:10px">
   <h1 id="shop-name">読み込み中…</h1>
   <p id="shop-tagline"></p>
 </div>
@@ -84,7 +85,19 @@ fetch("/api/shops/" + slug)
   .then(data => {
     shop = data;
     document.title = shop.name + "｜つどい百貨店";
-    document.getElementById("shop-hero").style.background = shop.color;
+    const hero = document.getElementById("shop-hero");
+    hero.style.background = shop.color;
+    if (shop.headerImage) {
+      const safeUrl = String(shop.headerImage).replace(/"/g, "%22");
+      hero.style.backgroundImage = 'linear-gradient(rgba(10,14,26,.45), rgba(10,14,26,.55)), url("' + safeUrl + '")';
+      hero.style.backgroundSize = "cover";
+      hero.style.backgroundPosition = "center";
+    }
+    if (shop.profileImage) {
+      const av = document.getElementById("shop-avatar");
+      av.src = shop.profileImage;
+      av.style.display = "inline-block";
+    }
     document.getElementById("shop-name").textContent = shop.name;
     document.getElementById("shop-tagline").textContent = shop.tagline + "（店主：" + shop.owner + "）";
     if (shop.message) {

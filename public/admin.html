@@ -30,7 +30,7 @@
   <div id="orders"></div>
 
   <h3 style="margin-top:32px">店舗一覧・テナント編集キー</h3>
-  <p style="font-size:13px;line-height:1.9">各お店の店主が自分で商品を編集するためのキーです。新しく承認したお店には、承認メールでキーが自動送信されます。既存のお店は、ここから発行して店主へ直接お伝えください。再発行すると古いキーは使えなくなります。</p>
+  <p style="font-size:13px;line-height:1.9">各お店の店主が自分で商品を編集するためのキーです。新しく承認したお店には、承認メールでキーが自動送信されます。既存のお店は、ここから発行して店主へ直接お伝えください。再発行すると古いキーは使えなくなります。お店の削除もここからできます（削除は元に戻せません）。</p>
   <div id="shops"></div>
 
   <h3 style="margin-top:32px">店舗への商品追加</h3>
@@ -174,6 +174,23 @@ function loadAll() {
         });
         div.appendChild(btn);
         div.appendChild(result);
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "small-btn";
+        delBtn.style.cssText = "border-color:#a31621;color:#a31621;margin-left:8px";
+        delBtn.textContent = "このお店を削除";
+        delBtn.addEventListener("click", function () {
+          if (!confirm("「" + s.name + "」を削除しますか？ お店ページと商品はすべて消え、元に戻せません。（注文履歴と申込記録は残ります）")) return;
+          if (!confirm("最終確認です。本当に「" + s.name + "」を削除してよろしいですか？")) return;
+          fetch("/api/admin/shops/" + s.slug, { method: "DELETE", headers: headers() })
+            .then(r => r.json())
+            .then(d => {
+              if (d.ok) { alert("「" + d.name + "」を削除しました。"); loadAll(); }
+              else alert(d.error || "削除できませんでした");
+            })
+            .catch(() => alert("接続できませんでした。"));
+        });
+        div.appendChild(delBtn);
         box.appendChild(div);
       });
     })

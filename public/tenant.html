@@ -35,13 +35,24 @@
       </div>
     </div>
 
-    <h3>お店の紹介文</h3>
+    <h3>お店の紹介文・見た目</h3>
     <form class="form-card" id="shop-form" style="margin:0;max-width:none">
       <label>一言紹介（お店ページの見出しの下に出ます）</label>
       <input id="s-tagline" maxlength="120">
       <label>店主のことば</label>
       <textarea id="s-message" rows="4" maxlength="1000"></textarea>
-      <div class="cta-row"><button class="btn" type="submit">紹介文を保存</button></div>
+      <label>お店の色（トップのバナーとお店ページの見出しの色になります）</label>
+      <div id="s-swatches" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0"></div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <input id="s-color" type="color" style="width:64px;height:40px;padding:2px;cursor:pointer">
+        <div id="s-color-preview" style="flex:1;min-width:160px;color:#fff;border-radius:8px;padding:10px 14px;font-size:14px">プレビュー</div>
+      </div>
+      <p class="hint">丸い色見本から選ぶか、左の四角を押して自由に色を選べます。</p>
+      <label>ヘッダー画像（お店ページの見出しの背景になります・任意）</label>
+      <div id="s-header-photo"></div>
+      <label>プロフィール画像（店主の顔写真・お店のアイコンなど・任意）</label>
+      <div id="s-profile-photo"></div>
+      <div class="cta-row"><button class="btn" type="submit">紹介文・見た目を保存</button></div>
       <p class="msg" id="shop-msg"></p>
     </form>
 
@@ -61,6 +72,20 @@
       <div class="cta-row"><button class="btn" type="submit">商品を追加</button></div>
       <p class="msg" id="add-msg"></p>
     </form>
+
+    <h3 style="margin-top:40px;color:#a31621">お店を閉店する（撤退）</h3>
+    <div class="form-card" style="margin:0;max-width:none;border-color:#a31621">
+      <p style="margin-top:0;line-height:1.9;font-size:14px">閉店すると、お店ページと商品はすべて削除され、元に戻せません。注文の履歴は百貨店側に残ります。再度出店する場合は、あらためて出店申込が必要です。</p>
+      <label>確認のため、お店の名前をそのまま入力してください</label>
+      <input id="close-name" placeholder="お店の名前">
+      <div class="cta-row"><button class="btn" id="close-btn" style="background:#a31621;color:#fff;box-shadow:none" disabled>閉店する（お店を削除）</button></div>
+      <p class="msg" id="close-msg"></p>
+    </div>
+  </div>
+
+  <div id="closed-area" style="display:none">
+    <div class="paid-banner">お店を閉店しました。つどい百貨店への出店、ありがとうございました。</div>
+    <p><a href="index.html">百貨店トップへ</a></p>
   </div>
 </main>
 
@@ -159,6 +184,24 @@ function productCard(p) {
   return div;
 }
 
+const PRESET_COLORS = [
+  ["紺", "#1d2a4a"], ["藍", "#1e3a5f"], ["深緑", "#14532d"], ["ティール", "#0f4c4c"],
+  ["臙脂", "#7f1d2e"], ["梅", "#6d214f"], ["紫", "#3b2a5d"], ["茶", "#4a2f1b"],
+  ["オリーブ", "#4c5b2a"], ["墨", "#26262b"]
+];
+let shopHeaderPhoto = null;
+let shopProfilePhoto = null;
+
+function updateColorPreview() {
+  const c = document.getElementById("s-color").value;
+  const prev = document.getElementById("s-color-preview");
+  prev.style.background = c;
+  prev.textContent = (shopData ? shopData.name : "お店の名前") + "（" + c + "）";
+  document.querySelectorAll("#s-swatches button").forEach(function (b) {
+    b.style.outline = b.dataset.color === c ? "3px solid #c9a227" : "none";
+  });
+}
+
 function render() {
   document.getElementById("login-card").style.display = "none";
   document.getElementById("editor").style.display = "block";
@@ -167,6 +210,32 @@ function render() {
   document.getElementById("shop-meta").textContent = shopData.floor + " ｜ " + shopData.genre + " ｜ 店主：" + shopData.owner;
   document.getElementById("s-tagline").value = shopData.tagline || "";
   document.getElementById("s-message").value = shopData.message || "";
+
+  const sw = document.getElementById("s-swatches");
+  sw.innerHTML = "";
+  PRESET_COLORS.forEach(function ([label, hex]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.color = hex;
+    b.title = label + "（" + hex + "）";
+    b.style.cssText = "width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer;background:" + hex;
+    b.addEventListener("click", function () {
+      document.getElementById("s-color").value = hex;
+      updateColorPreview();
+    });
+    sw.appendChild(b);
+  });
+  document.getElementById("s-color").value = /^#[0-9a-fA-F]{6}$/.test(shopData.color || "") ? shopData.color : "#1d2a4a";
+  updateColorPreview();
+
+  const hp = document.getElementById("s-header-photo");
+  hp.innerHTML = "";
+  shopHeaderPhoto = createPhotoField(shopData.headerImage || "");
+  hp.appendChild(shopHeaderPhoto.element);
+  const pp = document.getElementById("s-profile-photo");
+  pp.innerHTML = "";
+  shopProfilePhoto = createPhotoField(shopData.profileImage || "");
+  pp.appendChild(shopProfilePhoto.element);
   const list = document.getElementById("product-list");
   list.innerHTML = "";
   if (!shopData.products || shopData.products.length === 0) {
@@ -201,16 +270,47 @@ document.getElementById("logout-btn").addEventListener("click", function () {
   location.reload();
 });
 
+document.getElementById("s-color").addEventListener("input", updateColorPreview);
+
 document.getElementById("shop-form").addEventListener("submit", function (e) {
   e.preventDefault();
   const msg = document.getElementById("shop-msg");
   fetch("/api/tenant/" + encodeURIComponent(slug), {
     method: "PUT", headers: headers(),
-    body: JSON.stringify({ tagline: document.getElementById("s-tagline").value, message: document.getElementById("s-message").value })
+    body: JSON.stringify({
+      tagline: document.getElementById("s-tagline").value,
+      message: document.getElementById("s-message").value,
+      color: document.getElementById("s-color").value,
+      headerImage: shopHeaderPhoto ? shopHeaderPhoto.getValue() : "",
+      profileImage: shopProfilePhoto ? shopProfilePhoto.getValue() : ""
+    })
   }).then(r => r.json()).then(d => {
     msg.className = "msg " + (d.ok ? "ok" : "error");
-    msg.textContent = d.ok ? "保存しました。" : (d.error || "失敗しました");
+    msg.textContent = d.ok ? "保存しました。お店ページに反映されています。" : (d.error || "失敗しました");
+    if (d.ok) loadShop();
   }).catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
+});
+
+document.getElementById("close-name").addEventListener("input", function () {
+  document.getElementById("close-btn").disabled = !(shopData && this.value === shopData.name);
+});
+document.getElementById("close-btn").addEventListener("click", function () {
+  const msg = document.getElementById("close-msg");
+  if (!confirm("本当に「" + shopData.name + "」を閉店しますか？ お店ページと商品はすべて削除され、元に戻せません。")) return;
+  fetch("/api/tenant/" + encodeURIComponent(slug), { method: "DELETE", headers: headers() })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        sessionStorage.removeItem(storeKey);
+        document.getElementById("editor").style.display = "none";
+        document.getElementById("login-card").style.display = "none";
+        document.getElementById("closed-area").style.display = "block";
+      } else {
+        msg.className = "msg error";
+        msg.textContent = d.error || "閉店できませんでした";
+      }
+    })
+    .catch(() => { msg.className = "msg error"; msg.textContent = "接続できませんでした。"; });
 });
 
 document.getElementById("add-form").addEventListener("submit", function (e) {
