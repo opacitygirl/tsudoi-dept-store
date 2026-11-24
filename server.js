@@ -206,6 +206,15 @@ function requireTenant(req, res, next) {
   next();
 }
 
+// 商品画像：URL（http/https）か、アップロードされた写真データ（data URL）のどちらかを許可する。
+// 写真データはブラウザ側で自動的に縮小・圧縮されてから送られてくる前提で、上限は約1.2MB分まで。
+function cleanImage(image) {
+  if (!image || typeof image !== "string") return "";
+  if (/^https?:\/\//.test(image)) return image.slice(0, 500);
+  if (/^data:image\/(jpeg|jpg|png|webp);base64,/.test(image) && image.length <= 1200000) return image;
+  return "";
+}
+
 function cleanProductInput(body) {
   const { name, price, description, image } = body || {};
   const priceNum = Number(price);
@@ -216,7 +225,7 @@ function cleanProductInput(body) {
     name: String(name).trim().slice(0, 60),
     price: Math.floor(priceNum),
     description: String(description || "").slice(0, 500),
-    image: image && /^https?:\/\//.test(image) ? String(image).slice(0, 500) : ""
+    image: cleanImage(image)
   };
 }
 
@@ -291,7 +300,7 @@ app.post("/webhook/stripe", express.raw({ type: "application/json" }), async (re
   res.json({ received: true });
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "3mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---- 店舗 ----
@@ -321,7 +330,7 @@ app.post("/api/applications", async (req, res) => {
     floor: floor || "1F",
     tagline: tagline || "",
     message: message || "",
-    product: { name: product.name, price: Number(product.price), description: product.description || "", image: product.image && /^https?:\/\//.test(product.image) ? product.image : "" },
+    product: { name: product.name, price: Number(product.price), description: product.description || "", image: cleanImage(product.image) },
     status: "pending",
     createdAt: new Date().toISOString()
   };
@@ -443,11 +452,10 @@ app.post("/api/admin/shops/:slug/products", requireAdmin, (req, res) => {
   const shops = readJson(SHOPS_FILE, []);
   const shop = shops.find((s) => s.slug === req.params.slug);
   if (!shop) return res.status(404).json({ error: "お店が見つかりません" });
-  const { name, price, description, image } = req.body || {};
-  if (!name || !price) return res.status(400).json({ error: "商品名と価格が必要です" });
+  const cleaned = cleanProductInput(req.body);
+  if (cleaned.error) return res.status(400).json({ error: cleaned.error });
   const id = shop.products.length ? Math.max(...shop.products.map((p) => p.id)) + 1 : 1;
-  const imageUrl = image && /^https?:\/\//.test(image) ? image : "";
-  shop.products.push({ id, name, price: Number(price), description: description || "", image: imageUrl });
+  shop.products.push({ id, ...cleaned });
   writeJson(SHOPS_FILE, shops);
   res.status(201).json({ ok: true, id });
 });
