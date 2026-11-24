@@ -181,8 +181,43 @@ function requireAdmin(req, res, next) {
   next();
 }
 function publicShop(shop) {
-  const { contactEmail, stripeAccountId, ...rest } = shop;
+  const { contactEmail, stripeAccountId, editKey, ...rest } = shop;
   return { ...rest, stripeLinked: Boolean(stripeAccountId) };
+}
+
+// テナント（店主）用の編集キー。お店ごとに1つ発行し、公開APIには絶対に含めない。
+function generateEditKey() {
+  return crypto.randomBytes(12).toString("hex");
+}
+
+// テナント認証：対象のお店と編集キーが一致した場合だけ次へ進む。
+function requireTenant(req, res, next) {
+  const shops = readJson(SHOPS_FILE, []);
+  const shop = shops.find((s) => s.slug === req.params.slug);
+  if (!shop) return res.status(404).json({ error: "お店が見つかりません" });
+  if (!shop.editKey) {
+    return res.status(403).json({ error: "このお店の編集キーはまだ発行されていません。百貨店の運営に発行を依頼してください" });
+  }
+  if (req.headers["x-tenant-key"] !== shop.editKey) {
+    return res.status(401).json({ error: "編集キーが違います" });
+  }
+  req.tenantShop = shop;
+  req.allShops = shops;
+  next();
+}
+
+function cleanProductInput(body) {
+  const { name, price, description, image } = body || {};
+  const priceNum = Number(price);
+  if (!name || !String(name).trim() || !priceNum || priceNum < 1 || priceNum > 10000000) {
+    return { error: "商品名と正しい価格（1円〜10,000,000円）が必要です" };
+  }
+  return {
+    name: String(name).trim().slice(0, 60),
+    price: Math.floor(priceNum),
+    description: String(description || "").slice(0, 500),
+    image: image && /^https?:\/\//.test(image) ? String(image).slice(0, 500) : ""
+  };
 }
 
 // ---- Stripe Webhook（注文の記録と通知） ----
@@ -330,6 +365,7 @@ function approveApplication(id) {
     color: "#1d2a4a",
     accent: "#c9a227",
     contactEmail: entry.email,
+    editKey: generateEditKey(),
     stripeAccountId: null,
     products: [{ id: 1, name: entry.product.name, price: entry.product.price, description: entry.product.description, image: entry.product.image || "" }]
   };
@@ -337,7 +373,7 @@ function approveApplication(id) {
   entry.status = "approved";
   writeJson(SHOPS_FILE, shops);
   writeJson(APPS_FILE, apps);
-  return { ok: true, slug, entry };
+  return { ok: true, slug, entry, editKey: shop.editKey };
 }
 
 function rejectApplication(id) {
@@ -350,11 +386,15 @@ function rejectApplication(id) {
   return { ok: true, entry };
 }
 
-async function notifyApplicantApproved(req, entry, slug) {
+async function notifyApplicantApproved(req, entry, slug, editKey) {
   const url = `${baseUrlOf(req)}/shop.html?slug=${slug}`;
+  const tenantUrl = `${baseUrlOf(req)}/tenant.html?slug=${slug}`;
+  const keySection = editKey
+    ? `\n\n【店主用の編集ページ】\n商品の追加・変更や、お店の紹介文の編集は、こちらのページからご自身で行えます。\n編集ページ: ${tenantUrl}\n編集キー: ${editKey}\n※編集キーはパスワードのようなものです。他の人に教えず、大切に保管してください。`
+    : "";
   await sendMail(entry.email,
     `【つどい百貨店】出店が承認されました｜${entry.shopName}`,
-    `${entry.ownerName} 様\n\nつどい百貨店への出店申込ありがとうございました。\n内容を確認し、承認しました。あなたのお店ページができました。\n\nお店ページ: ${url}\n\n商品の追加や内容の変更は、百貨店までご連絡ください。\n\nつどい百貨店`);
+    `${entry.ownerName} 様\n\nつどい百貨店への出店申込ありがとうございました。\n内容を確認し、承認しました。あなたのお店ページができました。\n\nお店ページ: ${url}${keySection}\n\nつどい百貨店`);
 }
 
 async function notifyApplicantRejected(entry) {
@@ -366,7 +406,7 @@ async function notifyApplicantRejected(entry) {
 app.post("/api/admin/applications/:id/approve", requireAdmin, async (req, res) => {
   const result = approveApplication(req.params.id);
   if (!result.ok) return res.status(result.status).json({ error: result.error });
-  await notifyApplicantApproved(req, result.entry, result.slug);
+  await notifyApplicantApproved(req, result.entry, result.slug, result.editKey);
   res.json({ ok: true, slug: result.slug });
 });
 
@@ -390,7 +430,7 @@ app.get("/decide/:id", async (req, res) => {
   if (action === "approve") {
     const result = approveApplication(req.params.id);
     if (!result.ok) return res.status(result.status).send(page("処理できませんでした", result.error));
-    await notifyApplicantApproved(req, result.entry, result.slug);
+    await notifyApplicantApproved(req, result.entry, result.slug, result.editKey);
     return res.send(page("承認しました", `「${result.entry.shopName}」のお店ページができました。<br><a href="/shop.html?slug=${result.slug}">お店ページを見る</a>`));
   }
   const result = rejectApplication(req.params.id);
@@ -410,6 +450,78 @@ app.post("/api/admin/shops/:slug/products", requireAdmin, (req, res) => {
   shop.products.push({ id, name, price: Number(price), description: description || "", image: imageUrl });
   writeJson(SHOPS_FILE, shops);
   res.status(201).json({ ok: true, id });
+});
+
+// 運営用：店舗一覧（編集キーの有無だけを返し、キー自体は返さない）
+app.get("/api/admin/shops", requireAdmin, (req, res) => {
+  const shops = readJson(SHOPS_FILE, []);
+  res.json(shops.map((s) => ({
+    slug: s.slug, name: s.name, owner: s.owner, floor: s.floor, genre: s.genre,
+    contactEmail: s.contactEmail || "", productCount: (s.products || []).length,
+    hasEditKey: Boolean(s.editKey)
+  })));
+});
+
+// 運営用：テナント編集キーの発行・再発行（再発行すると古いキーは使えなくなる）
+app.post("/api/admin/shops/:slug/tenant-key", requireAdmin, (req, res) => {
+  const shops = readJson(SHOPS_FILE, []);
+  const shop = shops.find((s) => s.slug === req.params.slug);
+  if (!shop) return res.status(404).json({ error: "お店が見つかりません" });
+  shop.editKey = generateEditKey();
+  writeJson(SHOPS_FILE, shops);
+  res.json({
+    ok: true,
+    editKey: shop.editKey,
+    tenantUrl: `${baseUrlOf(req)}/tenant.html?slug=${shop.slug}`,
+    contactEmail: shop.contactEmail || ""
+  });
+});
+
+// ---- テナント（店主）自身の編集 ----
+app.get("/api/tenant/:slug", requireTenant, (req, res) => {
+  const s = req.tenantShop;
+  res.json({
+    slug: s.slug, name: s.name, owner: s.owner, genre: s.genre, floor: s.floor,
+    tagline: s.tagline || "", message: s.message || "", products: s.products || []
+  });
+});
+
+app.put("/api/tenant/:slug", requireTenant, (req, res) => {
+  const { tagline, message } = req.body || {};
+  if (tagline !== undefined) req.tenantShop.tagline = String(tagline).slice(0, 120);
+  if (message !== undefined) req.tenantShop.message = String(message).slice(0, 1000);
+  writeJson(SHOPS_FILE, req.allShops);
+  res.json({ ok: true });
+});
+
+app.post("/api/tenant/:slug/products", requireTenant, (req, res) => {
+  const cleaned = cleanProductInput(req.body);
+  if (cleaned.error) return res.status(400).json({ error: cleaned.error });
+  const products = req.tenantShop.products || (req.tenantShop.products = []);
+  const id = products.length ? Math.max(...products.map((p) => p.id)) + 1 : 1;
+  products.push({ id, ...cleaned });
+  writeJson(SHOPS_FILE, req.allShops);
+  res.status(201).json({ ok: true, id });
+});
+
+app.put("/api/tenant/:slug/products/:id", requireTenant, (req, res) => {
+  const cleaned = cleanProductInput(req.body);
+  if (cleaned.error) return res.status(400).json({ error: cleaned.error });
+  const product = (req.tenantShop.products || []).find((p) => p.id === Number(req.params.id));
+  if (!product) return res.status(404).json({ error: "商品が見つかりません" });
+  Object.assign(product, cleaned);
+  writeJson(SHOPS_FILE, req.allShops);
+  res.json({ ok: true });
+});
+
+app.delete("/api/tenant/:slug/products/:id", requireTenant, (req, res) => {
+  const before = (req.tenantShop.products || []).length;
+  req.tenantShop.products = (req.tenantShop.products || []).filter((p) => p.id !== Number(req.params.id));
+  if (req.tenantShop.products.length === before) {
+    return res.status(404).json({ error: "商品が見つかりません" });
+  }
+  writeJson(SHOPS_FILE, req.allShops);
+  res.json({ ok: true });
 });
 
 // ---- 決済（店舗ごと） ----
