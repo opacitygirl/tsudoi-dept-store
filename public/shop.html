@@ -35,13 +35,14 @@
     <button class="btn" id="checkout-btn">購入手続きへ（Stripe）</button>
     <p class="msg" id="cart-msg"></p>
   </div>
-  <p style="margin-top:20px"><a href="index.html">← 百貨店トップに戻る</a></p>
+  <p style="margin-top:20px"><a href="index.html">← 百貨店トップに戻る</a> ｜ <a id="tenant-link" href="#">店主の方はこちら（商品の編集）</a></p>
 </main>
 
 <footer>つどい百貨店（プロトタイプ）</footer>
 
 <script>
 const slug = new URLSearchParams(window.location.search).get("slug");
+document.getElementById("tenant-link").href = "tenant.html?slug=" + encodeURIComponent(slug || "");
 const cartKey = "cart-" + slug;
 let shop = null;
 let cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
@@ -95,7 +96,10 @@ fetch("/api/shops/" + slug)
     shop.products.forEach(function (p) {
       const card = document.createElement("div");
       card.className = "product-card";
-      card.innerHTML = '<div class="thumb">🛍️</div><h3>' + p.name + '</h3><p class="desc">' + (p.description || "") + '</p><p class="price">' + fmt(p.price) + '</p>';
+      const thumb = p.image
+        ? '<div class="thumb"><img src="' + p.image + '" alt="" onerror="this.parentNode.textContent=\'🛍️\'"></div>'
+        : '<div class="thumb">🛍️</div>';
+      card.innerHTML = thumb + '<h3>' + p.name + '</h3><p class="desc">' + (p.description || "") + '</p><p class="price">' + fmt(p.price) + '</p>';
       const btn = document.createElement("button");
       btn.className = "btn";
       btn.textContent = "カートに入れる";
